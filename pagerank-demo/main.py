@@ -1,113 +1,119 @@
-from operator import attrgetter
 import time
 
-
-class Vertex(object):
-    def __init__(self):
-        self.in_edge = []
-        self.out_edge = []
-        self.score = 0.0
-        self.out_score = 0.0
-        self.name = ""
+from tqdm import trange
+from typing import List
+from operator import attrgetter
 
 
-class Edge(object):
-    def __init__(self, start, end):
-        self.start_id = start
-        self.end_id = end
+class Vertex:
+    def __init__(self, name):
+        self.name = name
+        self.from_nodes = []
+        self.in_degree = 0
+        self.to_nodes = []
+        self.out_degree = 0
+        self.rank = 0
+        self.out_rank = 0
 
 
-def addVertex(vertex_name, vtx_to_num, num_to_vtx):
-    '''
-    将域名映射为 ID
-    '''
-    res_id = 0
-    if vertex_name in vtx_to_num:
-        return vtx_to_num[vertex_name]
-    else:
-        res_id = len(vtx_to_num)
-        vtx_to_num[vertex_name] = res_id
-        num_to_vtx[res_id] = vertex_name
-    return res_id
+def get_data(file_path: str):
+    graph: List[Vertex] = []  # adjacency list and the index is the id of vertex
+    vertex_num = 0
+    edge_num = 0
+    name_to_id = {}
+    
+    # insert vertex if not exists, and return the id
+    def get_vertex_id(name: str) -> int:
+        nonlocal vertex_num
+        if name not in name_to_id:
+            name_to_id[name] = vertex_num
+            vertex_num += 1
+            graph.append(Vertex(name))
+        return name_to_id[name]
+    
+    def add_edge(start_id, end_id):
+        # start -> end
+        graph[start_id].to_nodes.append(end_id)
+        graph[start_id].out_degree += 1
+        graph[end_id].from_nodes.append(start_id)
+        graph[end_id].in_degree += 1
+    
+    with open(file_path, 'r') as f:
+        for line in f:
+            vs = line.split()
+            # the first vertex is the end vertex
+            end = vs[0]
+            end_id = get_vertex_id(end)
+            for start in vs[1:]:
+                start_id = get_vertex_id(start)
+                add_edge(start_id, end_id)
+                edge_num += 1
+    print(f'vertex number is {vertex_num}')
+    print(f'edge number is {edge_num}')
+    # initialize rank and out_rank
+    for v1_id, vertex in enumerate(graph):
+        vertex.rank = 1 / vertex_num
+        if vertex.out_degree != 0:
+            vertex.out_rank = vertex.rank / vertex.out_degree
+    return graph
 
 
-class PageRank(object):
-    def __init__(self, file_path):
-        self.__file_path = file_path
-        self.__vtx_to_num = dict()
-        self.__num_to_vtx = dict()
-        self.__edge_list = []
-        self.__vtx_list = []
-        self.__alpha = 0.15
-        self.__num = 30
-
-    def __read_data(self):
-        with open(self.__file_path, 'r') as fin:
-            for line in fin.readlines():
-                tmp = line.strip().split(' ')
-                # 起始节点，即被指向的节点。获取他们的ID
-                start = addVertex(tmp[0], self.__vtx_to_num, self.__num_to_vtx)
-                for i in range(1, len(tmp)):
-                    end = addVertex(tmp[i], self.__vtx_to_num, self.__num_to_vtx)
-                    # 标记边的起点和终点
-                    self.__edge_list.append(Edge(start, end))
-
-    def __initscore(self):
-        # 节点数量
-        self.__vtx_num = len(self.__vtx_to_num)
-        assert (self.__vtx_num > 0)
-        # 初始化各个节点
-        self.__vtx_list = [Vertex() for _ in range(self.__vtx_num)]
-        # 初始化分数：1 / 节点数量
-        for i in range(self.__vtx_num):
-            self.__vtx_list[i].score = 1.0 / self.__vtx_num
-        # 更新指向和被指向的关系
-        for edge in self.__edge_list:
-            # 我自己被哪些边指向
-            self.__vtx_list[edge.start_id].in_edge.append(edge.end_id)
-            # 我指向了哪些边
-            self.__vtx_list[edge.end_id].out_edge.append(edge.start_id)
-            # 名字
-            self.__vtx_list[edge.start_id].name = self.__num_to_vtx[edge.start_id]
-
-        # 假设，3号页面指向 1 号页面和 2 号页面，那么转移到任何一个页面的概率要平分
-        for i in range(self.__vtx_num):
-            if len(self.__vtx_list[i].out_edge) != 0:
-                self.__vtx_list[i].out_score = self.__vtx_list[i].score / len(self.__vtx_list[i].out_edge)
-
-    def run(self):
-        self.__read_data()
-        self.__initscore()
-        # 均匀跳转概率，即跳转到其他页面的概率
-        jump_pro = 1 / self.__vtx_num
-        # 开始迭代
-        print("vertex number is : {}".format(self.__vtx_num))
-        print("edge number is : {}".format(len(self.__edge_list)))
-        for _ in range(self.__num):
-            # 遍历页面，更新分数
-            for i in range(self.__vtx_num):
-                # 这些页面指向当前页面，计算概率
-                s = sum(self.__vtx_list[j].out_score for j in self.__vtx_list[i].in_edge)
-                # 再加上跳转概率
-                self.__vtx_list[i].score = s * (1 - self.__alpha) + self.__alpha * jump_pro
-            # 访问一次后，更新分数
-            for i in range(self.__vtx_num):
-                if len(self.__vtx_list[i].out_edge) != 0:
-                    self.__vtx_list[i].out_score = self.__vtx_list[i].score / len(self.__vtx_list[i].out_edge)
-
-        # 降序
-        self.__vtx_list.sort(key=attrgetter('score'), reverse=True)
-        return self.__vtx_list
+def page_rank(graph, alpha, max_iter_num, epsilon):
+    vertex_num = len(graph)
+    damping_value = (1 - alpha) / vertex_num
+    # for dead ends (out degree is 0)
+    revise = sum(vertex.rank / vertex_num for vertex in graph if vertex.out_degree == 0)
+    
+    # process bar
+    range_bar = trange(max_iter_num)
+    # begin iteration
+    for iter_num in range_bar:
+        # change of rank in every iteration
+        change = 0
+        for vertex in graph:
+            s = sum(graph[v_id].out_rank for v_id in vertex.from_nodes)
+            rank = alpha * (s + revise) + damping_value
+            change += abs(vertex.rank - rank)
+            vertex.rank = rank
+        # set the description of process bar
+        range_bar.set_description(f'change: {change:.6f}')
+        # update out_rank and revise
+        revise = 0
+        for vertex in graph:
+            if vertex.out_degree != 0:
+                vertex.out_rank = vertex.rank / vertex.out_degree
+            else:
+                revise += vertex.rank / vertex_num
+        # if the change of rank is smaller than epsilon, stop the iteration
+        if change < epsilon:
+            range_bar.total = iter_num
+            break
+    # close the process bar
+    range_bar.close()
 
 
-if __name__ == "__main__":
-    file_path = "link.data"
-    since = time.time()
-    p = PageRank(file_path)
-    a = p.run()
+if __name__ == '__main__':
+    # config
+    file_path = 'link.data'
+    alpha = 0.85
+    max_iter_num = 100  # maximum iteration number
+    epsilon = 1e-5  # determines whether the iteration is over
+    top_num = 50  # print the top_num vertexes
+    
+    # the graph is an adjacency list
+    graph = get_data(file_path)
+    
+    # begin compute
+    start = time.time()
+    page_rank(graph, alpha, max_iter_num, epsilon)
     end = time.time()
-    print(end - since)
-    name = [i.name for i in a[:50]]
-    score = [i.score for i in a[:50]]
-    for i, j in zip(name, score):
-        print(i, j)
+    print(f'cost {end - start} seconds')
+    
+    # sum rank
+    print('sum rank:', sum(vertex.rank for vertex in graph))
+    # sort and print
+    graph.sort(key=attrgetter('rank'), reverse=True)
+    top_50 = graph[:top_num]
+    print(f'the top {top_num} vertexes are:')
+    for i, vertex in enumerate(top_50):
+        print(f'{i:2d}: {vertex.name:12}, {vertex.rank}')
