@@ -1,148 +1,115 @@
 import time
 
-from tqdm import trange
-from typing import List
-from functools import partial
-from operator import attrgetter
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-
-from Vertex import Vertex
-
-
-# master 为当前节点，count app 是引用的名称
-sc = SparkContext("local", "count app")
-sc.addPyFile("Vertex.py")
-revise = sc.accumulator(0)
-# 取消日志的输出
-SparkSession.builder.getOrCreate().sparkContext.setLogLevel("WARN")
+from operator import attrgetter
+from operator import add
 
 
-def get_data(file_path: str):
-    graph: List[Vertex] = []  # adjacency list and the index is the id of vertex
-    vertex_num = 0
-    edge_num = 0
-    name_to_id = {}
-    
-    # insert vertex if not exists, and return the id
-    def get_vertex_id(name: str) -> int:
-        nonlocal vertex_num
-        if name not in name_to_id:
-            name_to_id[name] = vertex_num
-            vertex_num += 1
-            graph.append(Vertex(name))
-        return name_to_id[name]
-    
-    def add_edge(start_id, end_id):
-        # start -> end
-        graph[start_id].to_nodes.append(end_id)
-        graph[start_id].out_degree += 1
-        graph[end_id].from_nodes.append(start_id)
-        graph[end_id].in_degree += 1
-    
-    with open(file_path, 'r') as f:
-        for line in f:
-            vs = line.split()
-            # the first vertex is the end vertex
-            end = vs[0]
-            end_id = get_vertex_id(end)
-            for start in vs[1:]:
-                start_id = get_vertex_id(start)
-                add_edge(start_id, end_id)
+# 创建 spark context
+sc = SparkContext("local", "PageRank")
+SparkSession.builder.getOrCreate().sparkContext.setLogLevel("ERROR")
+
+
+# 节点到数字
+name_to_id = {}
+# 节点的出度
+out_degree = []
+# 当前节点被哪些节点指向
+in_degree = []
+# 节点数量
+vertex_num = 0
+# 边的数量
+edge_num = 0
+# 名字
+vtx_name = []
+
+
+def get_vtx_id(name, isOut=False):
+    global vertex_num, vtx_name
+    if name in name_to_id:
+        if isOut:
+            idx = name_to_id[name]
+            out_degree[idx] += 1
+    else:
+        vtx_name.append(name)
+        name_to_id[name] = vertex_num
+        vertex_num += 1
+        # 同时要追加一个节点，表示当前节点的出度
+        out_degree.append(1)
+        # 追加一个空列表，用于存储边
+        in_degree.append([])
+        assert len(out_degree) == len(name_to_id)
+    return name_to_id[name]
+
+
+def add_edge(target_id, source_id):
+    in_degree[target_id].append(source_id)
+
+
+def get_data(file_name):
+    global edge_num
+    with open(file_name, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            nodes = line.split()
+            target = nodes[0]
+            target_id = get_vtx_id(target)
+            for source in nodes[1:]:
+                source_id = get_vtx_id(source, isOut=True)
                 edge_num += 1
+                add_edge(target_id, source_id)
 
-    print(f'vertex number is {vertex_num}')
-    print(f'edge number is {edge_num}')
-    # initialize rank and out_rank
-    # map 操作
-    vertex_num = len(graph)
-    graph_rdd = sc.parallelize(graph)
+get_data("link.data")
+print(len(vtx_name))
+assert vertex_num == len(out_degree) == len(in_degree)
 
-    init_rank_map = graph_rdd.map(lambda x: x.rank / vertex_num)
-    rank = init_rank_map.collect()
+# 节点的排名
+rank = [1/vertex_num for i in range(vertex_num)]
+rank_rdd = sc.parallelize(rank)
 
-    out_rank_map = graph_rdd.map(lambda x: x.rank / x.out_degree if x.out_degree != 0 else x.rank)
-    out_rank = out_rank_map.collect()
-    # for vertex in graph:
-    #     vertex.rank = 1 / vertex_num
-    #     if vertex.out_degree != 0:
-    #         vertex.out_rank = vertex.rank / vertex.out_degree
+# 节点指向其他节点的分数
+out_rank = [i / j for i, j in zip(rank, out_degree)]
+out_rank_rdd = sc.parallelize(out_rank)
 
-    return graph, vertex_num, rank, out_rank
-
-
-def init_revise(x, vertex_num):
-    global revise
-    if x.out_degree == 0:
-        revise += x.rank / vertex_num
+# 指向自己的分数
+in_rank = [0 for i in range(vertex_num)]
+for i in range(vertex_num):
+    in_rank[i] = sum([out_rank[j] for j in in_degree[i]])
+in_rank_rdd = sc.parallelize(in_rank)
 
 
-def page_rank(graph, vertex_num, rank, out_rank, alpha, max_iter_num, epsilon):
-    global revise
-        
-    damping_value = (1 - alpha) / vertex_num
-
-    # for dead ends (out degree is 0)
-    # foreach
-
-    graph_rdd = sc.parallelize(graph)
-    # 必须指定参数，不能按位置传
-    graph_rdd.foreach(partial(init_revise, vertex_num=vertex_num))
-    # revise = sum(vertex.rank / vertex_num for vertex in graph if vertex.out_degree == 0)
-    
-    # process bar
-    range_bar = trange(max_iter_num)
-    # begin iteration
-    revise = int(revise)
-    for iter_num in range_bar:
-        # change of rank in every iteration
-        change = 0
-        for vertex in graph:
-            s = sum(graph[v_id].out_rank for v_id in vertex.from_nodes)
-            rank = alpha * (s + revise) + damping_value
-            change += abs(vertex.rank - rank)
-            vertex.rank = rank
-        # set the description of process bar
-        range_bar.set_description(f'change: {change:.6f}')
-        # update out_rank and revise
-        revise = 0
+# 算法参数
+alpha = 0.85
+max_iter_num = 100  # maximum iteration number
+epsilon = 1e-5  # determines whether the iteration is over
+damping_value = (1 - alpha) / vertex_num
 
 
-        for vertex in graph:
-            if vertex.out_degree != 0:
-                vertex.out_rank = vertex.rank / vertex.out_degree
-            else:
-                revise += vertex.rank / vertex_num
-        # if the change of rank is smaller than epsilon, stop the iteration
-        if change < epsilon:
-            range_bar.total = iter_num
-            break
-    # close the process bar
-    range_bar.close()
+# 开始算法
+since = time.time()
+for iter_num in range(max_iter_num):
+    difference = rank_rdd.reduce(add)
+    # 计算 rank
+    rank_rdd = in_rank_rdd.map(lambda x: x * alpha + damping_value)
+    difference -= rank_rdd.reduce(add)
+
+    # in_rank 更新
+    rank = rank_rdd.collect()
+    out_rank = [i / j for i, j in zip(rank, out_degree)]
+    out_rank_rdd = sc.parallelize(out_rank)
+
+    for i in range(vertex_num):
+        in_rank[i] = sum([out_rank[j] for j in in_degree[i]])
+    in_rank_rdd = sc.parallelize(in_rank)
+
+    print(iter_num, '---->>>>', difference)
+    if difference < epsilon:
+        break
+print(time.time() - since)
 
 
-if __name__ == '__main__':
-    # config
-    file_path = 'link.data'
-    alpha = 0.85
-    max_iter_num = 10  # maximum iteration number
-    epsilon = 1e-5  # determines whether the iteration is over
-    top_num = 50  # print the top_num vertexes
-    
-    # the graph is an adjacency list
-    graph, vertex_num, rank, out_rank = get_data(file_path)
-
-    # begin compute
-    start = time.time()
-    page_rank(graph, vertex_num, rank, out_rank, alpha, max_iter_num, epsilon)
-    end = time.time()
-    print(f'cost {end - start} seconds')
-    
-    # sum rank
-    print('sum rank:', sum(vertex.rank for vertex in graph))
-    # sort and print
-    graph.sort(key=attrgetter('rank'), reverse=True)
-    top_50 = graph[:top_num]
-    print(f'the top {top_num} vertexes are:')
-    for i, vertex in enumerate(top_50):
-        print(f'{i:2d}: {vertex.name:12}, {vertex.rank}')
+in_rank = rank_rdd.collect()
+result = [(x, y) for x, y in sorted(zip(in_rank, vtx_name))]
+for item in result[-10:-1]:
+    print(item)
