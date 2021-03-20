@@ -113,7 +113,7 @@ if __name__ == '__main__':
     print('sum rank:', sum(vertex.rank for vertex in graph))
     # sort and print
     graph.sort(key=attrgetter('rank'), reverse=True)
-    top_50 = graph[:50]
+    top_50 = graph[:top_num]
     print(f'the top {top_num} vertexes are:')
     for i, vertex in enumerate(top_50):
         print(f'{i:2d}: {vertex.name:12}, {vertex.rank}')
