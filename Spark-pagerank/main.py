@@ -1,115 +1,50 @@
-import time
-
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
-from operator import attrgetter
 from operator import add
+import numpy as np
+from pyspark import SparkConf, SparkContext
 
 
-# 创建 spark context
-sc = SparkContext("local", "PageRank")
-SparkSession.builder.getOrCreate().sparkContext.setLogLevel("ERROR")
+# 配置文件
+conf = SparkConf().setMaster("local").setAppName("PageRank")
+sc = SparkContext(conf=conf)
 
+# 加载文件为 RDD
+# links_data_rdd = sc.textFile("link.data")
 
-# 节点到数字
-name_to_id = {}
-# 节点的出度
-out_degree = []
-# 当前节点被哪些节点指向
-in_degree = []
-# 节点数量
-vertex_num = 0
-# 边的数量
-edge_num = 0
-# 名字
-vtx_name = []
+# 获取最初的概率转移矩阵
+a = np.zeros((10, 10))
+for num in range(60):
+    for row, col in zip(np.random.randint(0, 10, 1), np.random.randint(0, 10, 1)):
+        a[row, col] = 1.0
 
+# 初始化分数
+pagerank = sc.parallelize([1 / 10 for i in range(10)])
 
-def get_vtx_id(name, isOut=False):
-    global vertex_num, vtx_name
-    if name in name_to_id:
-        if isOut:
-            idx = name_to_id[name]
-            out_degree[idx] += 1
-    else:
-        vtx_name.append(name)
-        name_to_id[name] = vertex_num
-        vertex_num += 1
-        # 同时要追加一个节点，表示当前节点的出度
-        out_degree.append(1)
-        # 追加一个空列表，用于存储边
-        in_degree.append([])
-        assert len(out_degree) == len(name_to_id)
-    return name_to_id[name]
+# 修正节点没有出度的问题
+revise = np.zeros((10, 10))
+zero = np.sum(a, axis=0)
+for i in zero:
+    if i == 0:
+        revise[:, i] = 1 / 10
 
+a += revise
 
-def add_edge(target_id, source_id):
-    in_degree[target_id].append(source_id)
+# 一个页面指向两个页面，那么分数要平分
+a = a / np.sum(a, axis=0)
 
-
-def get_data(file_name):
-    global edge_num
-    with open(file_name, 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            nodes = line.split()
-            target = nodes[0]
-            target_id = get_vtx_id(target)
-            for source in nodes[1:]:
-                source_id = get_vtx_id(source, isOut=True)
-                edge_num += 1
-                add_edge(target_id, source_id)
-
-get_data("link.data")
-print(len(vtx_name))
-assert vertex_num == len(out_degree) == len(in_degree)
-
-# 节点的排名
-rank = [1/vertex_num for i in range(vertex_num)]
-rank_rdd = sc.parallelize(rank)
-
-# 节点指向其他节点的分数
-out_rank = [i / j for i, j in zip(rank, out_degree)]
-out_rank_rdd = sc.parallelize(out_rank)
-
-# 指向自己的分数
-in_rank = [0 for i in range(vertex_num)]
-for i in range(vertex_num):
-    in_rank[i] = sum([out_rank[j] for j in in_degree[i]])
-in_rank_rdd = sc.parallelize(in_rank)
-
-
-# 算法参数
 alpha = 0.85
-max_iter_num = 100  # maximum iteration number
-epsilon = 1e-5  # determines whether the iteration is over
-damping_value = (1 - alpha) / vertex_num
+jump_value = 0.15 / 10
+difference = 1e-4
+max_num = 100
+tmp_pagerank = 0
 
+for i in range(max_num):
+    # 减少计算量
+    if i % 9 == 0:
+        tmp = pagerank.reduce(add)
+        if np.sum(tmp - tmp_pagerank) < difference:
+            break
+        else:
+            tmp_pagerank = tmp
+    pagerank = pagerank.map(lambda x: (alpha * a + jump_value) * x)
 
-# 开始算法
-since = time.time()
-for iter_num in range(max_iter_num):
-    difference = rank_rdd.reduce(add)
-    # 计算 rank
-    rank_rdd = in_rank_rdd.map(lambda x: x * alpha + damping_value)
-    difference -= rank_rdd.reduce(add)
-
-    # in_rank 更新
-    rank = rank_rdd.collect()
-    out_rank = [i / j for i, j in zip(rank, out_degree)]
-    out_rank_rdd = sc.parallelize(out_rank)
-
-    for i in range(vertex_num):
-        in_rank[i] = sum([out_rank[j] for j in in_degree[i]])
-    in_rank_rdd = sc.parallelize(in_rank)
-
-    print(iter_num, '---->>>>', difference)
-    if difference < epsilon:
-        break
-print(time.time() - since)
-
-
-in_rank = rank_rdd.collect()
-result = [(x, y) for x, y in sorted(zip(in_rank, vtx_name))]
-for item in result[-10:-1]:
-    print(item)
+print(pagerank.collect())

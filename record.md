@@ -15,6 +15,6 @@
 
 ## 代码执行
 
-- 代码执行： `spark-submit filename.py`
+- 代码执行： `spark-submit --master local main.py`
 - spark-submit 是在spark安装目录中bin目录下的一个shell脚本文件，用于在集群中启动应用程序
 - 只保留`WARN`级别及其以上的日志输出：`SparkSession.builder.getOrCreate().sparkContext.setLogLevel("WARN")`
