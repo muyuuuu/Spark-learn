@@ -30,6 +30,7 @@ a += revise
 
 # 一个页面指向两个页面，那么分数要平分
 a = a / np.sum(a, axis=0)
+a = sc.parallelize(a)
 
 alpha = 0.85
 jump_value = 0.15 / 10
@@ -39,12 +40,13 @@ tmp_pagerank = 0
 
 for i in range(max_num):
     # 减少计算量
-    if i % 9 == 0:
+    if i % 10 == 0:
         tmp = pagerank.reduce(add)
         if np.sum(tmp - tmp_pagerank) < difference:
             break
         else:
             tmp_pagerank = tmp
-    pagerank = pagerank.map(lambda x: (alpha * a + jump_value) * x)
+    a = a.map(lambda x: x * pagerank)
 
-print(pagerank.collect())
+
+print(a.collect())
