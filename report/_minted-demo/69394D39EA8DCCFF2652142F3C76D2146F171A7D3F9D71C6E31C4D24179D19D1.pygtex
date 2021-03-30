@@ -1,0 +1,4 @@
+\begin{Verbatim}[commandchars=\\\{\},codes={\catcode`\$=3\catcode`\^=7\catcode`\_=8}]
+\PYG{n}{net} \PYG{o}{=} \PYG{n}{DataParallel}\PYG{p}{(}\PYG{n}{Compare}\PYG{p}{(}\PYG{n}{n\PYGZus{}way}\PYG{p}{,} \PYG{n}{k\PYGZus{}shot}\PYG{p}{))}\PYG{o}{.}\PYG{n}{cuda}\PYG{p}{()}
+\PYG{n}{net} \PYG{o}{=} \PYG{n}{DDP}\PYG{p}{(}\PYG{n}{Compare}\PYG{p}{(}\PYG{n}{n\PYGZus{}way}\PYG{p}{,} \PYG{n}{k\PYGZus{}shot}\PYG{p}{))}\PYG{o}{.}\PYG{n}{cuda}\PYG{p}{()}
+\end{Verbatim}

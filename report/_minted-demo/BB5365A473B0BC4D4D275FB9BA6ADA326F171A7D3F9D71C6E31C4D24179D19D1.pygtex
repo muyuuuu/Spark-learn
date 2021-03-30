@@ -1,0 +1,7 @@
+\begin{Verbatim}[commandchars=\\\{\},codes={\catcode`\$=3\catcode`\^=7\catcode`\_=8}]
+\PYG{k}{if} \PYG{n}{device\PYGZus{}ids} \PYG{o+ow}{is} \PYG{k+kc}{None}\PYG{p}{:}
+    \PYG{n}{device\PYGZus{}ids} \PYG{o}{=} \PYG{n}{\PYGZus{}get\PYGZus{}all\PYGZus{}device\PYGZus{}indices}\PYG{p}{()}
+
+\PYG{k}{if} \PYG{n}{output\PYGZus{}device} \PYG{o+ow}{is} \PYG{k+kc}{None}\PYG{p}{:}
+    \PYG{n}{output\PYGZus{}device} \PYG{o}{=} \PYG{n}{device\PYGZus{}ids}\PYG{p}{[}\PYG{l+m+mi}{0}\PYG{p}{]}
+\end{Verbatim}

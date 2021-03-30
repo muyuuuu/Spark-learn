@@ -1,7 +1,6 @@
-from pyspark import SparkContext, SparkConf
-import time
 from operator import add
-
+from pyspark import SparkContext, SparkConf
+import time, pickle
 
 # 节点到数字，数字到节点
 name_to_id, id_to_name = {}, {}
@@ -15,8 +14,9 @@ max_iter_num = 15
 alpha = 0.85
 
 # spark 配置
-conf = SparkConf().setMaster("local").setAppName("PageRank")
+conf = SparkConf().setMaster("local[6]").setAppName("PageRank")
 sc = SparkContext(conf=conf)
+
 
 def get_vtx_id(name, isOut=False):
     '''
@@ -59,29 +59,37 @@ def get_data(file_name):
 
 def compute_contribs(x):
     '''
-    当前节点，以及分数
+    当前被指向节点的分数
     '''
+    global vertex_num
     urls, rank = x[1][0], x[1][1]
     num_urls = len(urls)
+
     for url in urls:
         yield (url, rank / num_urls)
 
 
 if __name__ == "__main__":
-    
+
     get_data("link.data")
     print("Loaded data")
 
-    print("Vertex number is {}, Edge number is {}".format(vertex_num, edge_num))
+    print("Vertex number is {}, Edge number is {}".format(
+        vertex_num, edge_num))
     assert vertex_num == len(point_edges)
 
     # 临时变量，便于映射
     nodes = [i for i in range(vertex_num)]
     # 生成 RDD，RDD的结构是 <id, [urls]>, id 是节点编号，urls 是自己指向了哪些节点，一个列表
-    links = sc.parallelize(nodes).map(lambda x: (x, point_edges[x])).cache()
-    # 初始化 rank 值
-    ranks = sc.parallelize(nodes).map(lambda x: (x, 1/vertex_num)).cache()
+    links = sc.parallelize(nodes).map(lambda x: (x, point_edges[x]))
+    # 初始化 rank 值 以及概率修正
+    revise_num = point_edges.count([])
+    ranks = sc.parallelize(nodes).map(lambda x: (x, 1 / vertex_num + 1 / vertex_num / revise_num))
+    # <id, ([urls], rank)>
+    contribs = links.join(ranks).cache()
+
     print("Initialize RDD of links and ranks")
+    print("Partition number is : {}".format(len(ranks.glom().collect())))
 
     jump_value = (1 - alpha) / vertex_num
 
@@ -89,10 +97,34 @@ if __name__ == "__main__":
     for i in range(max_iter_num):
         # join 把节点编号相同的放在一起，[urls, rank]
         # flatMap 计算每个节点所带有的分数，返回 <url_id, rank>
-        contribs = links.join(ranks).flatMap(lambda x: compute_contribs(x))
+        contribs = contribs.flatMap(lambda x: compute_contribs(x)).reduceByKey(
+            add).map(lambda x: (x[0], (point_edges[x[0]], x[1] * alpha + jump_value))).cache()
         # 将 url_id 相同的聚合在一起，也就是被指向的节点分数求和，并更新 rank 值
-        ranks = contribs.reduceByKey(add).mapValues(lambda rank: rank * alpha + jump_value)
+
+    end = time.time()
+    print("Cost {} time to establish DAG.".format(end - since))
+
+    result = contribs.sortBy(lambda x: x[1][1], False).take(5)
+    print("Cost {} time to compute".format(time.time() - end))
+
+    for (link, rank) in result:
+        print("{}, {}".format(id_to_name[link], rank[1]))
+
+    ranks_data = contribs.collect()
+
+    since = time.time()
+    f = open('ranks_data', 'wb')
+    pickle.dump(ranks_data, f)
+
+    f = open('ranks_data', 'rb')
+    data = pickle.load(f)
     print(time.time() - since)
-    for (link, rank) in ranks.sortBy(lambda x: x[1], False).take(5):
-        print("{}, {}".format(id_to_name[link], rank))
+
+    ranks = sc.parallelize(data)
+
+    since = time.time()
+    contribs = ranks.flatMap(lambda x: compute_contribs(x)).reduceByKey(
+            add).map(lambda x: (x[0], (point_edges[x[0]], x[1] * alpha + jump_value))).cache()
+    result = contribs.sortBy(lambda x: x[1][1], False).take(5)
+
     print(time.time() - since)
