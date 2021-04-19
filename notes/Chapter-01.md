@@ -39,34 +39,12 @@
 - 通过网络，以服务的形式为用户提供非常廉价的 IT 资源，无需自建。
 - IaaS，基础设施即服务，将基础设施（计算资源和存储）作为服务出租；PaaS，平台即服务，有一系列开发环境，可以部署开发软件；SaaS，软件即服务，卖软件，如带有版权的软件。
 
-## hadoop
 
-不是单一的软件，是完整的生态系统。
-
-![](figure/hadoop-structure.png)
-
-- **HDFS**，应用广泛，如非结构化数据的存储，支持海量分布式文件存储
-- YARN，分配CPU和内存等资源
-- **MapReduce**，分布式计算
-- Hive，存储数据与分析，如SQL。不存储数据，数据在HDFS，Hive只是编程接口，将SQL语句换成mapreduce计算语句，对HDFS存储的数据进行查询分析，返回结果
-- Pig，数据流处理，清洗、转换和加载，和 Hive 组合使用，Hive查询数据时，Pig完成对数据的清洗
-- Mahout，分布式数据挖掘机器学习常见算法等
-- Ambari，自动安装、部署和配置集群
-- zookeeper，如选择 master 节点等
-- HBase，实时计算
-- Sqoop，数据库抽取、转换、加载，将历史存储的关系性数据保存到HDFS中，进行大数据处理。将HDFS中的数据保存到SQL等关系性数据库中。
-
-### mapreduce
+## mapreduce
 
 分布式计算，像写单击程序一样写分布式程序，屏蔽了底层细节。
 
 ![](figure/mapreduce.png)
-
-### YARN
-
-Yet Another Resource Negotiator。企业中，不同的需求用不同的计算框架，将三种框架部署到1000台机器中，会产生资源争抢问题。有一个统一的资源调度管理框架，防止资源浪费、和资源竞争，方便数据无缝使用，YARN产生了。
-
-![](figure/YARN.png)
 
 ## Spark
 
