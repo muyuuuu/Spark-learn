@@ -1,13 +1,17 @@
-from pyspark import SparkContext
-from pyspark.sql import SparkSession
-from pyspark.mllib.linalg import Vectors, SparseVector, DenseVector
+import re
+import sys, time
 from operator import add
+from pyspark import SparkConf, SparkContext
 
 
-# master 为当前节点，count app 是引用的名称
-sc = SparkContext("local", "count app")
-# 取消日志的输出
-# sc.addPyFile("Vertex.py")
-SparkSession.builder.getOrCreate().sparkContext.setLogLevel("WARN")
+if __name__ == '__main__':
+    iterations = 10
+    conf = SparkConf().setAppName('PythonPageRank')
+    sc = SparkContext(conf=conf)
 
-# 创建RDD单词
+    data = [i for i in range(10)]
+    data = sc.parallelize(data).map(lambda x: (x, 1))
+
+    data.map(lambda x: (x[0], x[1]))
+    # data.collect()
+    data.foreach(print)

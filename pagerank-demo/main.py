@@ -1,4 +1,4 @@
-import time
+import time, pickle
 
 from tqdm import trange
 from typing import List
@@ -85,9 +85,10 @@ def page_rank(graph, alpha, max_iter_num, epsilon):
             else:
                 revise += vertex.rank / vertex_num
         # if the change of rank is smaller than epsilon, stop the iteration
-        if change < epsilon:
-            range_bar.total = iter_num
-            break
+        # if change < epsilon:
+        #     print("code break in iter: {}".format(iter_num))
+        #     range_bar.total = iter_num
+        #     break
     # close the process bar
     range_bar.close()
 
@@ -105,15 +106,29 @@ if __name__ == '__main__':
     
     # begin compute
     start = time.time()
-    page_rank(graph, alpha, max_iter_num, epsilon)
-    end = time.time()
-    print(f'cost {end - start} seconds')
+    page_rank(graph, alpha, 15, epsilon)
     
     # sum rank
     print('sum rank:', sum(vertex.rank for vertex in graph))
     # sort and print
     graph.sort(key=attrgetter('rank'), reverse=True)
     top_50 = graph[:top_num]
-    print(f'the top {top_num} vertexes are:')
+    end = time.time()
+    print(f'Cost {end - start} seconds')
+
+    print(f'The top {top_num} vertexes are:')
     for i, vertex in enumerate(top_50):
         print(f'{i:2d}: {vertex.name:12}, {vertex.rank}')
+
+    # since = time.time()
+    # f = open('ranks_data', 'wb')
+    # pickle.dump(graph, f)
+
+    # f = open('ranks_data', 'rb')
+    # graph = pickle.load(f)
+
+    # page_rank(graph, alpha, 1, epsilon)
+    # graph.sort(key=attrgetter('rank'), reverse=True)
+    # top_50 = graph[:top_num]
+
+    # print(time.time() - since)
