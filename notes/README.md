@@ -3,3 +3,5 @@
 - Chapter-03：Spark 单机安装与部署
 - Chapter-04：RDD 编程
 - Chapter-05：Hadoop 基础，了解架构
+- Chapter-06：HDFS 基本概念
+- 
