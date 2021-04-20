@@ -4,4 +4,4 @@
 - Chapter-04：RDD 编程
 - Chapter-05：Hadoop 基础，了解架构
 - Chapter-06：HDFS 基本概念
-- 
+- Chapter-07：分布式数据库 HBase
