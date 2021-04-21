@@ -67,3 +67,11 @@ namenode 元数据保存到内存，超大内存，通道优化，网络更高�
 
 小的集群，jobtracker 可以和 namenode 位于同一台机器；大的集群，需要更多的内存，所以位于不同的机器。
 
+## 局限与不足
+
+- mapreduce 表达能力有限，迭代效率低
+- 资源浪费，必须 map 完成后才能 reduce
+
+![](figure/hdfs1-2.png)
+
+![](figure/hdfs-increase.png)
